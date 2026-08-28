@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Hexagon — a Catan-like game</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- animated WebGL water/shader background -->
+  <canvas id="bg-canvas"></canvas>
+
+  <!-- ===================== LOBBY ===================== -->
+  <div id="lobby" class="screen">
+    <div class="lobby-card glass">
+      <h1 class="logo">HEX<span>AGON</span></h1>
+      <p class="tagline">Build. Trade. Settle the island. 2–10 players over your LAN.</p>
+
+      <div id="lobby-home">
+        <label class="field">
+          <span>Your name</span>
+          <input id="name-input" maxlength="16" placeholder="Enter a name…" />
+        </label>
+        <div class="row">
+          <button id="btn-create" class="btn primary">Create Game</button>
+        </div>
+        <div class="divider"><span>or join</span></div>
+        <div class="row">
+          <input id="code-input" class="code-input" maxlength="4" placeholder="CODE" />
+          <button id="btn-join" class="btn">Join</button>
+        </div>
+        <p id="lobby-error" class="error"></p>
+      </div>
+
+      <div id="lobby-room" class="hidden">
+        <div class="room-code">Room code: <b id="room-code"></b>
+          <button id="btn-copy" class="btn tiny">copy</button>
+        </div>
+        <p class="hint">Share the <b>Network URL</b> from the server console + this code.</p>
+        <ul id="player-list" class="player-list"></ul>
+        <div id="host-options">
+          <div class="row" id="host-row-1">
+            <label class="field inline">
+              <span>Win at</span>
+              <select id="winvp" style="width: auto;"><option>10</option><option>12</option><option>14</option></select>
+              <span>pts</span>
+            </label>
+            <label class="field inline">
+              <span>Bot Difficulty:</span>
+              <select id="bot-diff" style="width: auto;">
+                <option value="1">Easy</option>
+                <option value="2" selected>Normal</option>
+                <option value="3">Hard</option>
+              </select>
+            </label>
+          </div>
+          <div class="row" id="host-row-2">
+            <button id="btn-addbot" class="btn tiny">+ Bot</button>
+            <button id="btn-rmbot" class="btn tiny ghost">– Bot</button>
+          </div>
+        </div>
+        <div class="row">
+          <button id="btn-start" class="btn primary">Start Game</button>
+          <button id="btn-leave" class="btn ghost">Leave</button>
+        </div>
+        <p id="start-hint" class="hint"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== GAME ===================== -->
+  <div id="game" class="screen hidden">
+    <canvas id="board"></canvas>
+
+    <!-- top bar -->
+    <div id="topbar" class="glass">
+      <div id="turn-banner"></div>
+      <div id="dice" class="dice hidden">
+        <div class="die" id="die1"></div>
+        <div class="die" id="die2"></div>
+      </div>
+      <div id="admin-panel" class="hidden" style="display: flex; gap: 8px; margin-left: auto; margin-right: 8px;">
+        <label style="color: white; font-size: 12px; display: flex; align-items: center; gap: 4px;">
+          Bot Trades: <input id="admin-bot-trades" type="number" min="0" max="10" value="1" style="width: 55px; padding: 6px 8px;"/>
+        </label>
+        <button id="btn-admin-size-down" class="btn tiny ghost" title="Decrease Board Size">Size -</button>
+        <button id="btn-admin-size-up" class="btn tiny ghost" title="Increase Board Size">Size +</button>
+        <button id="btn-admin-randomize" class="btn tiny ghost" title="Randomize Board">Refresh</button>
+        <button id="btn-admin-restart" class="btn tiny ghost" title="Restart Game">Restart</button>
+        <button id="btn-admin-end" class="btn tiny bad" title="End Session">End Game</button>
+      </div>
+      <button id="btn-help" class="btn tiny ghost">?</button>
+    </div>
+
+    <!-- players panel -->
+    <div id="players" class="panel glass"></div>
+
+    <!-- log + chat -->
+    <div id="side" class="panel glass">
+      <div id="log" class="log"></div>
+      <div class="chat-row">
+        <input id="chat-input" placeholder="Say something…" maxlength="200" />
+      </div>
+    </div>
+
+    <!-- your hand + actions -->
+    <div id="hand" class="glass">
+      <div id="resources" class="resources"></div>
+      <div id="actions" class="actions"></div>
+    </div>
+
+    <div id="hint-bar"></div>
+
+    <!-- modals -->
+    <div id="modal-root"></div>
+
+    <!-- floating tooltip -->
+    <div id="tooltip" class="tooltip hidden"></div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
