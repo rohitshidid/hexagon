@@ -56,11 +56,55 @@ npm start
 ngrok http 3000                        # share the https URL it prints
 ```
 
-**Option C — deploy** to Render / Railway / Fly.io (the server already reads
-`process.env.PORT`). Then it's a permanent URL, no host machine required.
+**Option C — deploy** to Render for a permanent URL with no host machine
+required. See [Deploy to Render (free)](#deploy-to-render-free) below.
 
 > A tunnel exposes your game to anyone with the link while it's running. The room
 > code is the only gate — share it privately and stop the tunnel when done.
+
+## Deploy to Render (free)
+
+`render.yaml` in the repo root is a Render Blueprint — it declares the whole
+service, so you don't fill in any dashboard fields by hand.
+
+**1. Push to GitHub.** Render deploys from a Git repo.
+```bash
+git add -A
+git commit -m "Hexagon: initial commit"
+gh repo create hexagon --private --source=. --push    # or create the repo on github.com and:
+# git remote add origin git@github.com:<you>/hexagon.git && git push -u origin main
+```
+
+**2. Create the Blueprint.** Sign in at [dashboard.render.com](https://dashboard.render.com)
+with GitHub → **New** → **Blueprint** → pick the repo → **Apply**. Render reads
+`render.yaml` and provisions the service. First build takes 2–4 minutes.
+
+**3. Play.** You get `https://hexagon-<hash>.onrender.com`. Open it, **Create Game**,
+share the URL + room code. HTTPS and `wss://` are handled automatically.
+
+Pushes to `main` redeploy automatically (`autoDeploy: true`).
+
+### What the free plan means in practice
+
+| | |
+|---|---|
+| **Sleeps after 15 min idle** | Waking takes ~1 min. **All rooms and in-progress games are lost** — state lives only in the `rooms` Map in memory, there is no database. |
+| **750 instance-hours/month** | Per workspace. A full month is ~730h, so one always-on service just fits — but only if it's your only free service. |
+| **512 MB RAM, 0.1 CPU** | Ample here; bot turns may animate slightly less smoothly than on a laptop. |
+| **One instance only** | Rooms are in-memory, so a second instance would answer "Room not found" to half the players. Never enable scaling without moving state to Redis first. |
+
+An **active game keeps the service awake** — WebSocket messages count as inbound
+traffic. The 15-minute timer only starts once everyone has left, so in practice you
+pay the ~1 min cold start once, when the first player of the session loads the page.
+
+Don't add an external uptime pinger to dodge the cold start: keeping the service
+awake 24/7 burns ~730 of your 750 monthly hours, and Render suspends **all** your
+free services for the rest of the month once they're gone.
+
+### Changing the region
+
+`render.yaml` sets `region: singapore`. Other free regions: `oregon`, `ohio`,
+`virginia`, `frankfurt`. Pick whichever is closest to your players.
 
 ## How to play
 

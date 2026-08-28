@@ -1,0 +1,19 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# NOTE: Hexagon keeps all room/game state in memory (the `rooms` Map in
+# server.js). It must therefore run as exactly ONE instance — the free plan
+# is single-instance by design, so do not enable scaling on a paid plan
+# without first moving room state into Redis or adding sticky sessions.
+services:
+  - name: hexagon
+    type: web
+    runtime: node
+    plan: free
+    region: singapore        # closest free region; also: oregon, ohio, virginia, frankfurt
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production

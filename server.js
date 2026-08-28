@@ -14,6 +14,8 @@ const PORT = process.env.PORT || 3000;
 const GRACE_MS = 1000 * 60 * 10; // keep a room alive 10 min after the last socket drops
 
 const app = express();
+// Render pings this to confirm the instance is live (healthCheckPath in render.yaml).
+app.get('/healthz', (_req, res) => res.type('text').send('ok'));
 app.use(express.static(join(__dirname, 'public')));
 
 const httpServer = createServer(app);
