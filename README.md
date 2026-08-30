@@ -19,8 +19,15 @@ Local:   http://localhost:3000
 Network: http://192.168.1.146:3000   <- share this with friends on your LAN
 ```
 
-- **Host:** open the page → enter a name → **Create Game** → share the 4-letter room code.
-- **Friends (same Wi-Fi/LAN):** open the **Network URL** → enter a name → type the code → **Join**.
+Two pages are served:
+
+| Path    | What it is |
+| ------- | ---------- |
+| `/`     | Landing page — what the game is, how it works, and a playable board demo that runs entirely in the browser. |
+| `/play` | The game itself — lobby, room codes, and the live table. |
+
+- **Host:** open **`/play`** → enter a name → **Create Game** → share the 4-letter room code.
+- **Friends (same Wi-Fi/LAN):** open the **Network URL** → **Play now** (or go straight to `/play`) → enter a name → type the code → **Join**.
 - Host clicks **Start Game** when everyone's in (2–10 players).
 - **Short on players?** Host can hit **+ Bot** in the lobby to fill seats with AI
   opponents. Bots place their own setup, roll, build, move the robber, and respond

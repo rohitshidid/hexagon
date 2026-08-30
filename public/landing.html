@@ -1,0 +1,1799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hexagon — ten people, one island, no rules lawyer</title>
+<meta name="description" content="A Catan-like board game for 2–10 players in the browser. Authoritative server, bots that fill empty seats, and a board that grows with the table. Host it on your own laptop." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 29 9.5v15L16 32 3 24.5v-15z' fill='%23c2410c'/%3E%3C/svg%3E" />
+
+<style>
+/* ------------------------------------------------------------------ tokens */
+:root {
+  --ink:        #16181d;
+  --ink-soft:   rgba(22, 24, 29, .66);
+  --ink-faint:  rgba(22, 24, 29, .44);
+  --bg:         #ffffff;
+  --bg-tint:    #f6f7f9;
+  --line:       rgba(22, 24, 29, .10);
+  --line-soft:  rgba(22, 24, 29, .06);
+  --accent:      #c2410c;
+  --accent-deep: #9a3412;
+  --blue:       #2563eb;
+  --teal:       #0d94a4;
+  --green:      #0f8a5f;
+  --amber:      #b26a00;
+  --red:        #c2352b;
+  --violet:     #7c3aed;
+  /* the game's own resource palette, lifted from public/css/style.css */
+  --wood:  #2f7d32;
+  --brick: #c0612f;
+  --sheep: #6fb13a;
+  --wheat: #cba62f;
+  --ore:   #6b7a90;
+  --sea:   #0a1828;
+  --shadow-sm:  0 1px 2px rgba(16,24,40,.05), 0 4px 14px rgba(16,24,40,.05);
+  --shadow-lg:  0 2px 6px rgba(16,24,40,.04), 0 24px 60px rgba(16,24,40,.13);
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+          "Helvetica Neue", Helvetica, Arial, sans-serif;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+.wrap   { width: min(1120px, 100% - 48px); margin-inline: auto; }
+.narrow { width: min(760px, 100% - 48px);  margin-inline: auto; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+h1, h2, h3 { margin: 0; font-weight: 700; letter-spacing: -0.028em; line-height: 1.06; }
+h1 { font-size: clamp(2.7rem, 7.2vw, 4.9rem); letter-spacing: -0.035em; }
+h2 { font-size: clamp(2rem, 4.6vw, 3.3rem); }
+h3 { font-size: 1.16rem; letter-spacing: -0.012em; line-height: 1.3; }
+
+p { margin: 0; }
+
+.lede {
+  font-size: clamp(1.13rem, 2.1vw, 1.42rem);
+  font-weight: 300;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  margin: 0;
+}
+.lede strong { font-weight: 600; color: var(--ink); }
+
+code {
+  font-family: var(--mono);
+  font-size: .86em;
+  background: var(--bg-tint);
+  border: 1px solid var(--line-soft);
+  padding: .12em .42em;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.sec { padding: clamp(72px, 10vw, 132px) 0; }
+.sec-tint { background: var(--bg-tint); border-block: 1px solid var(--line-soft); }
+.sec-head { max-width: 46ch; }
+.sec-head h2 { margin-top: 12px; }
+.sec-head .lede { margin-top: 20px; }
+
+/* --------------------------------------------------------------- reveal */
+.reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition: opacity .75s cubic-bezier(.22,.61,.36,1),
+              transform .75s cubic-bezier(.22,.61,.36,1);
+  transition-delay: calc(var(--i, 0) * 90ms);
+  will-change: opacity, transform;
+}
+.reveal.in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+}
+
+/* ------------------------------------------------------------------- nav */
+.nav {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(255,255,255,.76);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid transparent;
+  transition: border-color .3s ease;
+}
+.nav.stuck { border-bottom-color: var(--line); }
+.nav-in { display: flex; align-items: center; gap: 11px; height: 56px; }
+.nav-in svg { width: 25px; height: 25px; }
+.nav-name { font-weight: 600; font-size: 15px; letter-spacing: -0.015em; }
+.nav-ver { font-family: var(--mono); font-size: 11px; color: var(--ink-faint);
+           border: 1px solid var(--line); border-radius: 20px; padding: 1px 8px; }
+.nav-links { margin-left: auto; display: flex; align-items: center; gap: 26px; }
+.nav-links a { color: var(--ink-soft); font-size: 14px; font-weight: 450; }
+.nav-links a:hover { color: var(--ink); text-decoration: none; }
+.nav-links .btn { color: #fff; }
+@media (max-width: 860px) { .nav-links a.opt { display: none; } .nav-ver { display: none; } }
+
+/* --------------------------------------------------------------- buttons */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  border-radius: 999px;
+  font-weight: 550;
+  letter-spacing: -0.011em;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform .18s ease, box-shadow .25s ease,
+              background-color .2s ease, border-color .2s ease;
+  white-space: nowrap;
+  font-family: inherit;
+}
+.btn:hover { text-decoration: none; }
+.btn-lg { font-size: 1.02rem; padding: 15px 30px; }
+.btn-sm { font-size: .85rem; padding: 7px 16px; }
+.btn-fill { background: var(--accent); color: #fff; box-shadow: 0 6px 20px rgba(194,65,12,.26); }
+.btn-fill:hover { background: var(--accent-deep); transform: translateY(-1.5px); box-shadow: 0 10px 26px rgba(194,65,12,.32); }
+.btn-ghost { background: rgba(22,24,29,.045); color: var(--ink); }
+.btn-ghost:hover { background: rgba(22,24,29,.08); transform: translateY(-1.5px); }
+.btn .arrow { transition: transform .2s ease; }
+.btn:hover .arrow { transform: translateX(2px); }
+.btn:disabled { opacity: .38; cursor: not-allowed; transform: none; box-shadow: none; }
+
+/* ------------------------------------------------------------------ hero */
+.hero { position: relative; padding: clamp(56px, 8vw, 92px) 0 0; text-align: center; }
+.hero::before {
+  content: ""; position: absolute; inset: -220px 0 auto; height: 780px; z-index: -1;
+  background:
+    radial-gradient(680px 420px at 50% 12%, rgba(194,65,12,.13), transparent 68%),
+    radial-gradient(520px 360px at 78% 4%,  rgba(203,166,47,.13), transparent 66%),
+    radial-gradient(460px 340px at 20% 8%,  rgba(13,148,164,.10), transparent 66%);
+  pointer-events: none;
+}
+.hero-mark { width: 88px; height: 88px; filter: drop-shadow(0 14px 30px rgba(194,65,12,.28)); }
+.hero h1 { margin: 26px auto 0; max-width: 16ch; }
+.hero .lede { margin: 22px auto 0; max-width: 58ch; }
+.hero-cta { margin-top: 34px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.hero-note { margin-top: 16px; font-size: .82rem; color: var(--ink-faint); }
+.hero-note a { color: var(--ink-faint); text-decoration: underline; text-underline-offset: 2px; }
+
+/* ------------------------------------------------------ the board window */
+.stage { margin-top: clamp(40px, 5.5vw, 66px); }
+.win {
+  margin: 0 auto;
+  max-width: 1000px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--sea);
+  border: 1px solid rgba(22,24,29,.14);
+  box-shadow: var(--shadow-lg);
+}
+.win-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 14px;
+  background: #0d1f34;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+.win-dots { display: flex; gap: 6px; }
+.win-dots i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+.win-title {
+  margin-inline: auto;
+  font-family: var(--mono); font-size: 12px;
+  color: rgba(234,242,255,.5);
+  padding-right: 46px;
+}
+.demo { display: grid; grid-template-columns: 1fr 236px; min-height: 430px; }
+.demo-board { position: relative; }
+#demo-canvas { display: block; width: 100%; height: 100%; min-height: 430px; cursor: pointer; touch-action: manipulation; }
+.demo-hint {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+  background: rgba(8,20,34,.86); border: 1px solid rgba(120,180,255,.2);
+  color: #eaf2ff; padding: 7px 16px; border-radius: 20px;
+  font-size: 13px; white-space: nowrap; pointer-events: none;
+  transition: opacity .25s ease;
+}
+.demo-side {
+  border-left: 1px solid rgba(255,255,255,.07);
+  padding: 14px;
+  display: flex; flex-direction: column; gap: 13px;
+  color: #eaf2ff;
+  background: rgba(255,255,255,.02);
+}
+.demo-label {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .09em;
+  text-transform: uppercase; color: rgba(234,242,255,.4);
+}
+.dice-row { display: flex; align-items: center; gap: 8px; }
+.die {
+  width: 34px; height: 34px; border-radius: 8px; background: #f4f7ff; color: #16263c;
+  display: grid; place-items: center; font-weight: 800; font-size: 19px;
+  box-shadow: inset 0 -3px 0 rgba(0,0,0,.15);
+}
+.die.rolling { animation: tumble .55s ease; }
+@keyframes tumble {
+  0% { transform: rotate(0) scale(1); } 25% { transform: rotate(90deg) scale(1.15); }
+  50% { transform: rotate(180deg) scale(.9); } 75% { transform: rotate(270deg) scale(1.1); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+.dice-sum { font-size: 13px; color: rgba(234,242,255,.55); }
+.dice-sum b { color: #f0c040; font-size: 15px; }
+
+.res-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+.res {
+  border-radius: 7px; padding: 6px 0 5px; text-align: center;
+  border: 1px solid rgba(255,255,255,.22);
+  color: #10202c; font-weight: 800; font-size: 15px; line-height: 1.15;
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.res .i { font-size: 13px; display: block; }
+.res.bump { transform: translateY(-4px); box-shadow: 0 6px 14px rgba(0,0,0,.35); }
+.res.wood  { background: linear-gradient(160deg, #4caf50, var(--wood)); }
+.res.brick { background: linear-gradient(160deg, #e07b3e, var(--brick)); }
+.res.sheep { background: linear-gradient(160deg, #b6e87a, var(--sheep)); }
+.res.wheat { background: linear-gradient(160deg, #f4d96a, var(--wheat)); }
+.res.ore   { background: linear-gradient(160deg, #a9b6c7, var(--ore)); }
+
+.demo-log {
+  flex: 1; min-height: 96px; max-height: 150px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 11.5px; color: rgba(234,242,255,.62); line-height: 1.42;
+}
+.demo-log div { background: rgba(0,0,0,.22); border-radius: 5px; padding: 3px 7px; animation: fadein .3s; }
+.demo-log b { color: #eaf2ff; font-weight: 600; }
+@keyframes fadein { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; } }
+
+.demo-btns { display: flex; gap: 7px; }
+.dbtn {
+  flex: 1; border-radius: 9px; padding: 9px 6px; font-size: 12.5px; font-weight: 600;
+  font-family: inherit; cursor: pointer; color: #eaf2ff;
+  background: rgba(255,255,255,.09); border: 1px solid rgba(120,180,255,.2);
+  transition: background .18s ease, transform .12s ease;
+}
+.dbtn:hover { background: rgba(255,255,255,.17); transform: translateY(-1px); }
+.dbtn:active { transform: none; }
+.dbtn.primary { background: linear-gradient(120deg, #e07b3e, var(--accent)); border-color: transparent; }
+.dbtn:disabled { opacity: .35; cursor: not-allowed; transform: none; }
+
+.seat-chips { display: flex; gap: 5px; }
+.chip {
+  flex: 1; font-family: var(--mono); font-size: 11px; padding: 5px 0; border-radius: 7px;
+  cursor: pointer; color: rgba(234,242,255,.55); text-align: center;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1);
+  transition: all .18s ease;
+}
+.chip.on { background: rgba(194,65,12,.85); color: #fff; border-color: transparent; }
+
+.stage-cap {
+  max-width: 74ch; margin: 20px auto 0; text-align: center;
+  font-size: .93rem; color: var(--ink-faint); line-height: 1.55;
+}
+.stage-cap strong { color: var(--ink-soft); font-weight: 600; }
+
+@media (max-width: 800px) {
+  .demo { grid-template-columns: 1fr; }
+  .demo-side { border-left: none; border-top: 1px solid rgba(255,255,255,.07); }
+  #demo-canvas, .demo-board { min-height: 340px; }
+  .demo-log { max-height: 84px; }
+}
+
+/* ------------------------------------------------------------- stat strip */
+.stats {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 30px; margin-top: clamp(56px, 7vw, 84px);
+  padding-top: clamp(40px, 5vw, 56px); border-top: 1px solid var(--line-soft);
+}
+.stat .n { font-size: clamp(1.9rem, 3.4vw, 2.5rem); font-weight: 700; letter-spacing: -0.035em; line-height: 1; }
+.stat .t { margin-top: 9px; font-size: .87rem; color: var(--ink-soft); line-height: 1.42; }
+@media (max-width: 760px) { .stats { grid-template-columns: repeat(2, 1fr); gap: 26px; } }
+
+/* ------------------------------------------------------------------ cards */
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; margin-top: 56px; }
+.card {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 14px;
+  padding: 26px 24px; box-shadow: var(--shadow-sm);
+}
+.card .ico { font-size: 26px; line-height: 1; }
+.card h3 { margin: 15px 0 9px; }
+.card p { color: var(--ink-soft); font-size: .95rem; line-height: 1.58; }
+@media (max-width: 880px) { .cards { grid-template-columns: 1fr; gap: 18px; } }
+
+.cards.six { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 880px) { .cards.six { grid-template-columns: 1fr; } }
+
+/* ---------------------------------------------------------- feature rows */
+.row2 {
+  display: grid; grid-template-columns: 1fr 1fr; gap: clamp(36px, 5.5vw, 76px);
+  align-items: center; margin-top: clamp(64px, 8vw, 104px);
+}
+.row2:first-of-type { margin-top: 56px; }
+.row2.flip .r2-text { order: 2; }
+.r2-text h3 { font-size: clamp(1.55rem, 3vw, 2.1rem); letter-spacing: -0.028em; margin: 10px 0 0; }
+.r2-text p { margin-top: 18px; color: var(--ink-soft); font-size: 1.02rem; line-height: 1.62; }
+.r2-text p strong { color: var(--ink); font-weight: 600; }
+@media (max-width: 880px) {
+  .row2 { grid-template-columns: 1fr; gap: 30px; }
+  .row2.flip .r2-text { order: 0; }
+}
+
+/* --------------------------------------------------------------- terminal */
+.term {
+  background: #12161c; border-radius: 12px; overflow: hidden;
+  box-shadow: var(--shadow-lg); border: 1px solid rgba(22,24,29,.2);
+}
+.term-bar {
+  display: flex; align-items: center; gap: 6px; padding: 8px 12px;
+  background: #1b2029; border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.term-bar i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+.term-bar span { margin-inline: auto; font-family: var(--mono); font-size: 11px; color: rgba(255,255,255,.36); padding-right: 40px; }
+.term pre {
+  margin: 0; padding: 17px 18px; overflow-x: auto;
+  font-family: var(--mono); font-size: 12.6px; line-height: 1.72;
+  color: #d7dee8;
+}
+.term .c  { color: #6b7a90; }               /* comment / dim */
+.term .g  { color: #6fd08c; }               /* ok / added */
+.term .r  { color: #ff8a80; }               /* rejected */
+.term .y  { color: #f0c040; }               /* highlight */
+.term .b  { color: #7db9ff; }               /* key */
+.term .p  { color: #d9a7ff; }               /* prompt */
+
+/* ------------------------------------------------------------- code panel */
+.panel {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: var(--shadow-sm); overflow: hidden;
+}
+.panel-head {
+  padding: 12px 16px; border-bottom: 1px solid var(--line-soft);
+  font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint);
+  background: var(--bg-tint);
+}
+.panel-body { padding: 16px; }
+
+/* board-size table */
+.tbl { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.tbl th {
+  text-align: left; font-weight: 600; font-size: .76rem; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--ink-faint); padding: 0 12px 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.tbl td { padding: 11px 12px 11px 0; border-bottom: 1px solid var(--line-soft); color: var(--ink-soft); }
+.tbl td:first-child { color: var(--ink); font-weight: 550; }
+.tbl tr:last-child td { border-bottom: none; }
+.tbl .mono { font-family: var(--mono); font-size: .86rem; }
+
+/* cost pills */
+.costs { display: flex; flex-direction: column; gap: 10px; }
+.cost-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: 11px; background: var(--bg-tint);
+  border: 1px solid var(--line-soft);
+}
+.cost-row .nm { font-weight: 600; font-size: .95rem; min-width: 92px; }
+.cost-row .pay { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
+.pill {
+  font-size: 12px; padding: 3px 9px; border-radius: 999px; color: #fff; font-weight: 600;
+  white-space: nowrap;
+}
+.pill.wood  { background: var(--wood); }
+.pill.brick { background: var(--brick); }
+.pill.sheep { background: #4f8f28; }
+.pill.wheat { background: #a8871f; }
+.pill.ore   { background: var(--ore); }
+.cost-row .vp { font-size: .82rem; color: var(--ink-faint); text-align: right; min-width: 76px; }
+
+/* ------------------------------------------------------------ action list */
+.actions-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 1px; background: var(--line-soft);
+  border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 44px;
+}
+.act { background: var(--bg); padding: 15px 16px; }
+.act code { background: none; border: none; padding: 0; font-size: .84rem; color: var(--accent); font-weight: 600; }
+.act p { margin-top: 6px; font-size: .84rem; color: var(--ink-faint); line-height: 1.5; }
+
+/* --------------------------------------------------------------- not-list */
+.nots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 26px; margin-top: 52px; }
+.not { display: flex; gap: 14px; }
+.not .x {
+  flex: none; width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 13px;
+  background: rgba(194,53,43,.1); color: var(--red); font-weight: 700;
+}
+.not h3 { font-size: 1.04rem; }
+.not p { margin-top: 7px; font-size: .93rem; color: var(--ink-soft); line-height: 1.58; }
+@media (max-width: 780px) { .nots { grid-template-columns: 1fr; gap: 22px; } }
+
+/* ----------------------------------------------------------------- steps */
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; margin-top: 52px; }
+.step .n {
+  width: 27px; height: 27px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent); color: #fff; font-size: .82rem; font-weight: 700;
+}
+.step h3 { margin: 15px 0 8px; font-size: 1.05rem; }
+.step p { color: var(--ink-soft); font-size: .93rem; line-height: 1.58; }
+.step .term { margin-top: 14px; }
+.step .term pre { font-size: 11.6px; padding: 13px 14px; }
+@media (max-width: 880px) { .steps { grid-template-columns: 1fr; gap: 30px; } }
+
+.copy-wrap { position: relative; }
+.copy-btn {
+  position: absolute; top: 8px; right: 8px; z-index: 2;
+  font-family: var(--sans); font-size: 11px; font-weight: 600;
+  padding: 4px 10px; border-radius: 6px; cursor: pointer;
+  background: rgba(255,255,255,.1); color: rgba(255,255,255,.6);
+  border: 1px solid rgba(255,255,255,.14);
+  transition: all .18s ease;
+}
+.copy-btn:hover { background: rgba(255,255,255,.2); color: #fff; }
+.copy-btn.done { background: rgba(111,208,140,.22); color: #6fd08c; border-color: transparent; }
+
+/* ------------------------------------------------------------------- cta */
+.cta { text-align: center; position: relative; }
+.cta::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: radial-gradient(620px 300px at 50% 40%, rgba(194,65,12,.10), transparent 70%);
+}
+.cta h2 { max-width: 17ch; margin-inline: auto; }
+.cta .lede { max-width: 52ch; margin: 20px auto 0; }
+.cta .hero-cta { margin-top: 32px; }
+
+/* ---------------------------------------------------------------- footer */
+.foot { border-top: 1px solid var(--line); padding: 46px 0 56px; }
+.foot-in { display: flex; flex-wrap: wrap; gap: 30px; justify-content: space-between; align-items: flex-start; }
+.foot-brand { display: flex; align-items: center; gap: 9px; }
+.foot-brand svg { width: 22px; height: 22px; }
+.foot-brand span { font-weight: 600; font-size: 14px; }
+.foot-note { margin-top: 10px; font-size: .82rem; color: var(--ink-faint); max-width: 40ch; line-height: 1.55; }
+.foot-links { display: flex; gap: 46px; flex-wrap: wrap; }
+.foot-col h4 { margin: 0 0 11px; font-size: .74rem; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); font-weight: 600; }
+.foot-col a { display: block; font-size: .88rem; color: var(--ink-soft); margin-bottom: 8px; }
+.foot-col a:hover { color: var(--accent); }
+.foot-also {
+  margin-top: 38px; padding-top: 24px; border-top: 1px solid var(--line-soft);
+  font-size: .85rem; color: var(--ink-faint); line-height: 1.6;
+}
+.foot-also a { font-weight: 550; }
+</style>
+</head>
+<body>
+
+<!-- ===================================================================== nav -->
+<nav class="nav" id="nav">
+  <div class="wrap nav-in">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2 29 9.5v15L16 32 3 24.5v-15z" fill="#c2410c"/><path d="M16 7.5 24.5 12.4v9.7L16 27 7.5 22.1v-9.7z" fill="#fff" fill-opacity=".22"/></svg>
+    <span class="nav-name">Hexagon</span>
+    <span class="nav-ver">v1.0.0</span>
+    <div class="nav-links">
+      <a href="#why" class="opt">Why</a>
+      <a href="#rules" class="opt">Rules</a>
+      <a href="#server" class="opt">Server</a>
+      <a href="#run" class="opt">Run it</a>
+      <a href="https://github.com/rohitshidid/hexagon" class="opt">GitHub</a>
+      <a href="/play" class="btn btn-fill btn-sm">Play now</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ==================================================================== hero -->
+<header class="hero">
+  <div class="wrap">
+    <svg class="hero-mark" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M16 2 29 9.5v15L16 32 3 24.5v-15z" fill="#c2410c"/>
+      <path d="M16 7.5 24.5 12.4v9.7L16 27 7.5 22.1v-9.7z" fill="#fff" fill-opacity=".22"/>
+    </svg>
+    <h1>Ten people, one island, no rules lawyer.</h1>
+    <p class="lede">
+      Hexagon is a Catan-like board game that runs in the browser for
+      <strong>2 to 10 players</strong> — over your Wi-Fi, through a tunnel, or on a free
+      Render instance. The server owns every rule, so nobody miscounts the longest road and
+      nobody can see your hand. Short a few players? <strong>Fill the empty seats with bots.</strong>
+    </p>
+    <div class="hero-cta">
+      <a href="https://github.com/rohitshidid/hexagon" class="btn btn-fill btn-lg">View on GitHub <span class="arrow">→</span></a>
+      <a href="#run" class="btn btn-ghost btn-lg">Run it yourself</a>
+    </div>
+    <p class="hero-note">
+      Node + <code>ws</code> · no build step · no database · no accounts ·
+      <a href="/play">or open the game right here</a>
+    </p>
+  </div>
+
+  <!-- ------------------------------------------------------ live board demo -->
+  <div class="wrap stage reveal">
+    <div class="win">
+      <div class="win-bar">
+        <div class="win-dots">
+          <i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>
+        </div>
+        <div class="win-title">hexagon — room <span id="demo-code">7KQD</span></div>
+      </div>
+      <div class="demo">
+        <div class="demo-board">
+          <canvas id="demo-canvas"></canvas>
+          <div class="demo-hint" id="demo-hint">Click a glowing spot to settle it</div>
+        </div>
+        <aside class="demo-side">
+          <div>
+            <div class="demo-label">Players at the table</div>
+            <div class="seat-chips" id="seat-chips" style="margin-top:7px">
+              <button class="chip on" data-p="4">4p</button>
+              <button class="chip" data-p="7">7p</button>
+              <button class="chip" data-p="10">10p</button>
+            </div>
+          </div>
+          <div>
+            <div class="demo-label">Dice</div>
+            <div class="dice-row" style="margin-top:7px">
+              <div class="die" id="die1">–</div>
+              <div class="die" id="die2">–</div>
+              <div class="dice-sum" id="dice-sum">roll to produce</div>
+            </div>
+          </div>
+          <div>
+            <div class="demo-label">Your hand</div>
+            <div class="res-grid" id="res-grid" style="margin-top:7px"></div>
+          </div>
+          <div class="demo-log" id="demo-log"></div>
+          <div class="demo-btns">
+            <button class="dbtn primary" id="btn-roll">🎲 Roll</button>
+            <button class="dbtn" id="btn-new">New board</button>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <p class="stage-cap">
+      ↑ <strong>This board is real.</strong> It is generated in your browser by the same code
+      <code>game/board.js</code> runs on the server — the same resource weights, the same
+      2–12 token bag, the same coastal port placement. Settlements obey the real distance rule,
+      a roll pays out through the real production loop, and a 7 really does move the robber.
+      Nothing here is saved, and nobody else can see it.
+    </p>
+  </div>
+
+  <div class="wrap stats">
+    <div class="stat reveal" style="--i:0"><div class="n">2–10</div><div class="t">players in one room, which is more than the box holds</div></div>
+    <div class="stat reveal" style="--i:1"><div class="n">61</div><div class="t">hexes on the largest board, up from 19 at four players</div></div>
+    <div class="stat reveal" style="--i:2"><div class="n">0</div><div class="t">rules enforced by the browser — the server decides all of them</div></div>
+    <div class="stat reveal" style="--i:3"><div class="n">10 min</div><div class="t">your seat is held after you close the tab by accident</div></div>
+  </div>
+</header>
+
+<!-- ===================================================================== why -->
+<section class="sec sec-tint" id="why">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">The problem</div>
+      <h2>Board game night has a logistics problem.</h2>
+      <p class="lede">
+        The box seats four. Six people showed up. The expansion is at someone else's flat,
+        two of you are dialling in from another city, and the one person who owns the rulebook
+        has strong opinions about whether that road counts.
+      </p>
+    </div>
+
+    <div class="cards">
+      <div class="card reveal" style="--i:0">
+        <div class="ico">🪑</div>
+        <h3>Everyone fits</h3>
+        <p>
+          Two players or ten, in the same room. The island grows to match the table —
+          19 hexes up to four players, 37 up to seven, 61 beyond that — so the tenth
+          person still has somewhere to build rather than a corner nobody wanted.
+        </p>
+      </div>
+      <div class="card reveal" style="--i:1">
+        <div class="ico">⚖️</div>
+        <h3>Nobody argues the rules</h3>
+        <p>
+          Longest Road is recomputed after every road and every settlement that might cut one.
+          Largest Army counts itself. The distance rule is checked before your settlement lands.
+          There is nothing left to disagree about.
+        </p>
+      </div>
+      <div class="card reveal" style="--i:2">
+        <div class="ico">🤖</div>
+        <h3>Two people is enough</h3>
+        <p>
+          A two-player game of anything Catan-shaped is a bad game. Add bots in the lobby
+          until the board feels contested — they place their own setup, roll, build, move
+          the robber and answer your trade offers.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================== server -->
+<section class="sec" id="server">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">Authoritative server</div>
+      <h2>The browser asks. The server decides.</h2>
+      <p class="lede">
+        Every rule lives in one file on the server. The client is a renderer with buttons —
+        it cannot grant itself a resource, and it is never sent a card it shouldn't see.
+      </p>
+    </div>
+
+    <div class="row2">
+      <div class="r2-text reveal">
+        <div class="eyebrow">Validation</div>
+        <h3>Fifteen actions, each one refused by name.</h3>
+        <p>
+          Everything a player can do goes through a single <code>act()</code> entry point, which
+          checks whose turn it is, which phase the game is in, and whether the move is legal —
+          <strong>then</strong> mutates state. A rejected move comes back with the actual reason,
+          which is also why the game is pleasant to learn: it tells you what you got wrong.
+        </p>
+        <p>
+          Because validation happens in one place, a hacked client is not a category of bug.
+          The worst it can do is send a message the server says no to.
+        </p>
+      </div>
+      <div class="term reveal" style="--i:1">
+        <div class="term-bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span>server → client</span></div>
+<pre><span class="c">// a client that has been tampered with, asking nicely</span>
+<span class="p">→</span> <span class="b">action</span> buildSettlement <span class="c">{ vertexId: 41 }</span>
+<span class="r">←</span> <span class="r">error</span> <span class="r">"too close to another building"</span>
+
+<span class="p">→</span> <span class="b">action</span> buildCity <span class="c">{ vertexId: 12 }</span>
+<span class="r">←</span> <span class="r">error</span> <span class="r">"upgrade your own settlement"</span>
+
+<span class="p">→</span> <span class="b">action</span> rollDice
+<span class="r">←</span> <span class="r">error</span> <span class="r">"not your turn"</span>
+
+<span class="p">→</span> <span class="b">action</span> bankTrade <span class="c">{ give: "ore", get: "wheat" }</span>
+<span class="r">←</span> <span class="r">error</span> <span class="r">"need 4 ore"</span>
+
+<span class="c">// and one that plays by the rules</span>
+<span class="p">→</span> <span class="b">action</span> buildRoad <span class="c">{ edgeId: 33 }</span>
+<span class="g">←</span> <span class="g">ok</span> <span class="c">— 1 wood + 1 brick spent, longest road recomputed</span></pre>
+      </div>
+    </div>
+
+    <div class="row2 flip">
+      <div class="r2-text reveal">
+        <div class="eyebrow">Private hands</div>
+        <h3>Your cards are yours, per socket.</h3>
+        <p>
+          The server does not broadcast one shared world. It builds a <strong>separate view for
+          every player</strong> — you get your own resource counts and your own development cards;
+          everyone else is a card <em>count</em> and nothing more. The robber steals at random from
+          a hand the thief never gets to look at.
+        </p>
+        <p>
+          Which means "open dev tools and read the opponent's hand" doesn't work, because the
+          opponent's hand was never sent to your machine.
+        </p>
+      </div>
+      <div class="term reveal" style="--i:1">
+        <div class="term-bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span>what your socket receives</span></div>
+<pre><span class="b">you</span>: {
+  <span class="b">name</span>: <span class="y">"Rohit"</span>,
+  <span class="b">resources</span>: <span class="c">{ wood: 3, brick: 1, sheep: 0, wheat: 2, ore: 4 }</span>,
+  <span class="b">devCards</span>: <span class="c">[ "knight", "vp" ]</span>
+}
+
+<span class="b">players</span>: [
+  { <span class="b">name</span>: <span class="y">"Ana"</span>,   <span class="b">cards</span>: <span class="g">7</span>, <span class="b">devs</span>: <span class="g">2</span>, <span class="b">vp</span>: 4, <span class="b">knights</span>: 1 },
+  { <span class="b">name</span>: <span class="y">"Marco"</span>, <span class="b">cards</span>: <span class="g">3</span>, <span class="b">devs</span>: <span class="g">0</span>, <span class="b">vp</span>: 6, <span class="b">knights</span>: 3 },
+  { <span class="b">name</span>: <span class="y">"🤖 Bot 1"</span>, <span class="b">cards</span>: <span class="g">5</span>, <span class="b">devs</span>: <span class="g">1</span>, <span class="b">vp</span>: 3, <span class="b">knights</span>: 0 }
+]
+
+<span class="c">// counts, never contents. hidden VP cards are counted</span>
+<span class="c">// into `vp` only for the player who is holding them.</span></pre>
+      </div>
+    </div>
+
+    <div class="actions-grid reveal">
+      <div class="act"><code>rollDice</code><p>Two dice, then production on every matching hex the robber isn't sitting on.</p></div>
+      <div class="act"><code>buildRoad</code><p>Must connect to your network — and an opponent's settlement breaks the chain.</p></div>
+      <div class="act"><code>buildSettlement</code><p>Distance rule, road connection, and a piece limit of five.</p></div>
+      <div class="act"><code>buildCity</code><p>Upgrades your own settlement only. Four per player.</p></div>
+      <div class="act"><code>buyDev</code><p>Drawn from a shuffled deck scaled to the size of the board.</p></div>
+      <div class="act"><code>playDev</code><p>Knight, road building, year of plenty, monopoly. VP cards stay hidden.</p></div>
+      <div class="act"><code>bankTrade</code><p>4:1, or 3:1 / 2:1 if you settled a matching harbour.</p></div>
+      <div class="act"><code>proposeTrade</code><p>An offer to the table; anyone may accept, you choose who.</p></div>
+      <div class="act"><code>respondTrade</code><p>Accept or reject. Bots answer too, on their own valuation.</p></div>
+      <div class="act"><code>moveRobber</code><p>Any hex but the one it's on, then steal from an adjacent player.</p></div>
+      <div class="act"><code>discard</code><p>Exactly half, rounded down, from every hand of eight or more.</p></div>
+      <div class="act"><code>endTurn</code><p>Passes the turn and re-checks the win condition.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- =================================================================== rules -->
+<section class="sec sec-tint" id="rules">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">The game</div>
+      <h2>If you have played Catan, you already know this.</h2>
+      <p class="lede">
+        Place two settlements and two roads in snake order. Roll, collect, build, trade,
+        end turn. First to the target score wins. The differences are all about scale.
+      </p>
+    </div>
+
+    <div class="row2">
+      <div class="r2-text reveal">
+        <div class="eyebrow">Costs &amp; points</div>
+        <h3>Four things to buy, and what they're worth.</h3>
+        <p>
+          Roads are cheap and only matter in aggregate — five connected segments takes
+          <strong>Longest Road</strong> and its two points off whoever had it. Cities are the real
+          engine: they pay double on every roll, which is why an ore-and-wheat corner is worth
+          fighting over.
+        </p>
+        <p>
+          Games run to <strong>10 points</strong> up to six players, and 12 above that so a bigger
+          table doesn't end before everyone has had a turn. The host can push it to 14.
+        </p>
+      </div>
+      <div class="reveal" style="--i:1">
+        <div class="panel">
+          <div class="panel-head">game/engine.js — COSTS</div>
+          <div class="panel-body costs">
+            <div class="cost-row">
+              <span class="nm">Road</span>
+              <span class="pay"><span class="pill wood">🌲 wood</span><span class="pill brick">🧱 brick</span></span>
+              <span class="vp">longest road</span>
+            </div>
+            <div class="cost-row">
+              <span class="nm">Settlement</span>
+              <span class="pay"><span class="pill wood">🌲</span><span class="pill brick">🧱</span><span class="pill sheep">🐑</span><span class="pill wheat">🌾</span></span>
+              <span class="vp">1 point</span>
+            </div>
+            <div class="cost-row">
+              <span class="nm">City</span>
+              <span class="pay"><span class="pill wheat">🌾 ×2</span><span class="pill ore">⛰️ ×3</span></span>
+              <span class="vp">2 points</span>
+            </div>
+            <div class="cost-row">
+              <span class="nm">Dev card</span>
+              <span class="pay"><span class="pill sheep">🐑</span><span class="pill wheat">🌾</span><span class="pill ore">⛰️</span></span>
+              <span class="vp">knight or +1</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row2 flip">
+      <div class="r2-text reveal">
+        <div class="eyebrow">Board generation</div>
+        <h3>The island is sized to the table.</h3>
+        <p>
+          The board is a hex of hexes with a radius picked from the player count. Resources are
+          dealt from a bag weighted <strong>4 : 4 : 4 : 3 : 3</strong> — the same ratio as the
+          printed board — and number tokens come from a 2-to-12 bag with no sevens, repeated as
+          many times as the island needs.
+        </p>
+        <p>
+          Vertices and edges are derived by deduplicating hex corners, so adjacency is a fact of
+          the geometry rather than a hand-written table. Ports land on coastal edges, sorted by
+          angle around the island so they end up spaced rather than clumped.
+        </p>
+      </div>
+      <div class="reveal" style="--i:1">
+        <div class="panel">
+          <div class="panel-head">game/board.js — radiusForPlayers()</div>
+          <div class="panel-body">
+            <table class="tbl">
+              <thead><tr><th>Players</th><th>Radius</th><th>Hexes</th><th>Win at</th></tr></thead>
+              <tbody>
+                <tr><td>2 – 4</td><td class="mono">2</td><td class="mono">19</td><td class="mono">10</td></tr>
+                <tr><td>5 – 6</td><td class="mono">3</td><td class="mono">37</td><td class="mono">10</td></tr>
+                <tr><td>7</td><td class="mono">3</td><td class="mono">37</td><td class="mono">12</td></tr>
+                <tr><td>8 – 10</td><td class="mono">4</td><td class="mono">61</td><td class="mono">12</td></tr>
+              </tbody>
+            </table>
+            <p style="margin-top:14px;font-size:.84rem;color:var(--ink-faint);line-height:1.55">
+              The dev deck scales with the island too — 14 knights, 5 victory points, 2 each of
+              road building, year of plenty and monopoly, multiplied out for every 19 hexes.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row2">
+      <div class="r2-text reveal">
+        <div class="eyebrow">Bots</div>
+        <h3>They fill seats. They are not trying to humiliate you.</h3>
+        <p>
+          Press <strong>+ Bot</strong> in the lobby, pick easy, normal or hard, and start.
+          Bots place their own opening settlements, roll on cue, discard on a seven, drop the
+          robber on whichever hex hurts the leader most, and bank-trade toward whatever they're
+          short of. They evaluate your trade offers and sometimes say yes.
+        </p>
+        <p>
+          The strategy is deliberately greedy — city first, then settlement, then expand, then
+          dev cards. Every bot action is stepped through <strong>one move at a time on a timer</strong>,
+          so you watch the turn happen instead of the board teleporting.
+        </p>
+      </div>
+      <div class="term reveal" style="--i:1">
+        <div class="term-bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span>game log</span></div>
+<pre><span class="c">Bot 1's turn — one action every 750ms</span>
+
+<span class="y">🎲</span> Bot 1 rolled 8 (5+3).
+   Rohit collects <span class="g">🌾 wheat ×2</span>  <span class="c">(city)</span>
+   Bot 1 collects <span class="g">⛰️ ore</span>
+<span class="y">🏦</span> Bot 1 traded 4 sheep for 1 ore.
+<span class="y">🏙️</span> Bot 1 upgraded to a city.
+<span class="y">🛣️</span> Bot 1 built a road.
+   <span class="c">Longest Road recomputed — still Ana (6)</span>
+<span class="y">⏭️</span> Bot 1 ended their turn.
+
+<span class="c">— your turn —</span>
+<span class="y">🎲</span> Rohit rolled 7 (3+4).
+<span class="r">🥷</span> Robber! Players with 8+ cards discard half.
+   <span class="c">Bot 1 discards 3 · Marco discards 4</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =============================================================== connection -->
+<section class="sec" id="connection">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">Staying connected</div>
+      <h2>A dropped Wi-Fi signal is not a lost game.</h2>
+      <p class="lede">
+        Someone will refresh the tab. Someone's laptop will sleep mid-turn. Neither should end
+        an hour of play for the other nine people.
+      </p>
+    </div>
+
+    <div class="cards six">
+      <div class="card reveal" style="--i:0">
+        <div class="ico">↩︎</div>
+        <h3>Refresh puts you back</h3>
+        <p>
+          Your player id is kept in the browser. Reload and the socket reconnects, reattaches to
+          the same seat, and your pieces, hand and dev cards are exactly where you left them.
+        </p>
+      </div>
+      <div class="card reveal" style="--i:1">
+        <div class="ico">⏳</div>
+        <h3>The room waits ten minutes</h3>
+        <p>
+          A room isn't deleted the moment the last socket closes — that would make a refresh
+          fatal. It's held for ten minutes after everyone has gone, then cleaned up.
+        </p>
+      </div>
+      <div class="card reveal" style="--i:2">
+        <div class="ico">🔐</div>
+        <h3>A four-letter code, not an account</h3>
+        <p>
+          No sign-up, no email, no password. The host creates a game, gets a code like
+          <code>7KQD</code>, and shares it with the people they want in the room.
+        </p>
+      </div>
+      <div class="card reveal" style="--i:3">
+        <div class="ico">📶</div>
+        <h3>Same Wi-Fi, no setup</h3>
+        <p>
+          The server prints a LAN URL on start. Everyone on the router opens it and joins —
+          there is nothing to install on anyone else's machine.
+        </p>
+      </div>
+      <div class="card reveal" style="--i:4">
+        <div class="ico">🌍</div>
+        <h3>Remote friends via a tunnel</h3>
+        <p>
+          Point <code>cloudflared</code> or <code>ngrok</code> at port 3000 and share the https
+          URL. The client notices and switches to a secure <code>wss://</code> socket on its own.
+        </p>
+      </div>
+      <div class="card reveal" style="--i:5">
+        <div class="ico">☁️</div>
+        <h3>Or a permanent URL</h3>
+        <p>
+          <code>render.yaml</code> in the repo is a full Blueprint. Point Render at the repo,
+          hit apply, and you have a URL that doesn't need your laptop to be awake.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== run -->
+<section class="sec sec-tint" id="run">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">Getting started</div>
+      <h2>Two commands and a URL to share.</h2>
+      <p class="lede">
+        Node 18 or newer, two dependencies, no build step and nothing to compile.
+        Clone it and you are hosting in under a minute.
+      </p>
+    </div>
+
+    <div class="steps">
+      <div class="step reveal" style="--i:0">
+        <div class="n">1</div>
+        <h3>Clone and install</h3>
+        <p>Express for the static files and <code>ws</code> for the sockets. That is the entire dependency tree.</p>
+        <div class="term copy-wrap">
+          <button class="copy-btn" data-copy="git clone https://github.com/rohitshidid/hexagon.git
+cd hexagon
+npm install">Copy</button>
+<pre><span class="p">$</span> git clone https://github.com/rohitshidid/hexagon.git
+<span class="p">$</span> cd hexagon
+<span class="p">$</span> npm install</pre>
+        </div>
+      </div>
+      <div class="step reveal" style="--i:1">
+        <div class="n">2</div>
+        <h3>Start the server</h3>
+        <p>It prints a local URL for you and a network URL for everyone else on the Wi-Fi.</p>
+        <div class="term copy-wrap">
+          <button class="copy-btn" data-copy="npm start">Copy</button>
+<pre><span class="p">$</span> npm start
+
+  🎲  HEXAGON server running
+
+  <span class="c">Local:</span>   <span class="b">http://localhost:3000</span>
+  <span class="c">Network:</span> <span class="y">http://192.168.1.146:3000</span>
+           <span class="c">↑ share this one</span></pre>
+        </div>
+      </div>
+      <div class="step reveal" style="--i:2">
+        <div class="n">3</div>
+        <h3>Create a room</h3>
+        <p>Open <code>/play</code>, enter a name, create a game and read out the four letters.</p>
+        <div class="term copy-wrap">
+          <button class="copy-btn" data-copy="open http://localhost:3000/play">Copy</button>
+<pre><span class="p">$</span> open http://localhost:3000/play
+
+  <span class="c">→ enter a name, hit</span> <span class="y">Create Game</span>
+  <span class="c">→ room code:</span> <span class="y">7KQD</span>
+  <span class="c">→ short on people? hit</span> <span class="y">+ Bot</span>
+  <span class="c">→ then</span> <span class="y">Start Game</span></pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="row2" style="margin-top:clamp(64px,8vw,96px)">
+      <div class="r2-text reveal">
+        <div class="eyebrow">Playing with people elsewhere</div>
+        <h3>The network URL is private. A tunnel isn't.</h3>
+        <p>
+          That <code>192.168.x.x</code> address only resolves for people behind the same router.
+          For anyone further away, expose the port you are already running — no deploy, no
+          config, and it stops the moment you close the terminal.
+        </p>
+        <p>
+          A tunnel is open to anyone holding the link while it runs, and the room code is the
+          only gate. Share it privately, and stop the tunnel when the game ends.
+        </p>
+      </div>
+      <div class="term reveal" style="--i:1">
+        <div class="term-bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span>a second terminal</span></div>
+<pre><span class="c"># free, no signup</span>
+<span class="p">$</span> brew install cloudflared
+<span class="p">$</span> cloudflared tunnel --url http://localhost:3000
+
+  <span class="g">https://plain-otter-fern.trycloudflare.com</span>
+  <span class="c">↑ share this — https and wss are handled for you</span>
+
+<span class="c"># or, if you already have ngrok</span>
+<span class="p">$</span> ngrok http 3000
+
+<span class="c"># or deploy once and stop thinking about it —</span>
+<span class="c"># render.yaml is a complete Blueprint</span>
+<span class="p">$</span> git push
+  <span class="c">→ dashboard.render.com → New → Blueprint → Apply</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ honestly -->
+<section class="sec" id="limits">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">Honestly</div>
+      <h2>Five things it is not.</h2>
+      <p class="lede">
+        Knowing where something stops is more useful than a longer feature list.
+        Here is exactly where Hexagon does.
+      </p>
+    </div>
+
+    <div class="nots">
+      <div class="not reveal" style="--i:0">
+        <div class="x">✕</div>
+        <div>
+          <h3>It is not affiliated with Catan.</h3>
+          <p>
+            This is an original implementation of a game shaped like one you know, written from
+            scratch. It is not endorsed by, connected to, or licensed from Catan GmbH.
+          </p>
+        </div>
+      </div>
+      <div class="not reveal" style="--i:1">
+        <div class="x">✕</div>
+        <div>
+          <h3>It has no database.</h3>
+          <p>
+            Every room lives in a <code>Map</code> in one Node process. Restart the server and
+            the games are gone — which also means it must run as exactly one instance, and never
+            behind a load balancer without moving that state somewhere shared first.
+          </p>
+        </div>
+      </div>
+      <div class="not reveal" style="--i:2">
+        <div class="x">✕</div>
+        <div>
+          <h3>Player trading is one round deep.</h3>
+          <p>
+            You put an offer on the table and people accept or decline it. There is no
+            counter-offer, no haggling protocol — if you want to negotiate, negotiate out loud
+            and then post the deal you agreed on.
+          </p>
+        </div>
+      </div>
+      <div class="not reveal" style="--i:3">
+        <div class="x">✕</div>
+        <div>
+          <h3>The bots are not a tournament AI.</h3>
+          <p>
+            They play a greedy heuristic and they play it quickly. They will make a table of two
+            humans feel like a table of six, and they will lose to anyone paying attention.
+            A game of nothing but bots occasionally plateaus.
+          </p>
+        </div>
+      </div>
+      <div class="not reveal" style="--i:4">
+        <div class="x">✕</div>
+        <div>
+          <h3>Your seat lives in one browser.</h3>
+          <p>
+            Reconnection is keyed to a session stored locally. Clear your site data or move to a
+            different browser mid-game and you will need to join again by name.
+          </p>
+        </div>
+      </div>
+      <div class="not reveal" style="--i:5">
+        <div class="x">✕</div>
+        <div>
+          <h3>A free instance falls asleep.</h3>
+          <p>
+            On Render's free plan the service sleeps after 15 idle minutes and any game in
+            progress goes with it. An active game keeps it awake — the timer only starts once
+            everybody has left.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== cta -->
+<section class="sec cta">
+  <div class="wrap">
+    <h2 class="reveal">Get everyone on the island.</h2>
+    <p class="lede reveal" style="--i:1">
+      Open source, two dependencies, and small enough to read on a train.
+      Host it on the laptop you already have open.
+    </p>
+    <div class="hero-cta reveal" style="--i:2">
+      <a href="https://github.com/rohitshidid/hexagon" class="btn btn-fill btn-lg">View on GitHub <span class="arrow">→</span></a>
+      <a href="/play" class="btn btn-ghost btn-lg">Open the game</a>
+    </div>
+    <p class="hero-note reveal" style="--i:3">2–10 players · Node 18+ · no accounts · no database</p>
+  </div>
+</section>
+
+<!-- ================================================================== footer -->
+<footer class="foot">
+  <div class="wrap foot-in">
+    <div>
+      <div class="foot-brand">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2 29 9.5v15L16 32 3 24.5v-15z" fill="#c2410c"/><path d="M16 7.5 24.5 12.4v9.7L16 27 7.5 22.1v-9.7z" fill="#fff" fill-opacity=".22"/></svg>
+        <span>Hexagon</span>
+      </div>
+      <p class="foot-note">
+        A Catan-like board game for 2–10 players. Original implementation — not affiliated with
+        or endorsed by Catan GmbH.
+      </p>
+    </div>
+    <div class="foot-links">
+      <div class="foot-col">
+        <h4>Play</h4>
+        <a href="/play">Open the game</a>
+        <a href="#run">Host it yourself</a>
+        <a href="#rules">How it plays</a>
+      </div>
+      <div class="foot-col">
+        <h4>Code</h4>
+        <a href="https://github.com/rohitshidid/hexagon">GitHub</a>
+        <a href="https://github.com/rohitshidid/hexagon/blob/main/game/engine.js">The engine</a>
+        <a href="https://github.com/rohitshidid/hexagon/blob/main/game/board.js">Board generation</a>
+        <a href="https://github.com/rohitshidid/hexagon/issues">Report an issue</a>
+      </div>
+      <div class="foot-col">
+        <h4>Deploy</h4>
+        <a href="https://github.com/rohitshidid/hexagon/blob/main/render.yaml">render.yaml</a>
+        <a href="#connection">Tunnels &amp; LAN</a>
+        <a href="#limits">Known limits</a>
+      </div>
+    </div>
+  </div>
+  <div class="wrap foot-also">
+    Also by the same author:
+    <a href="https://rohitshidid.github.io/bak/">bak</a> — undo for the files git never sees ·
+    <a href="https://rohitshidid.github.io/Homebrew-portman/">portmap</a> — one table for listening ports ·
+    <a href="https://rohitshidid.github.io/splitplus/">Splitplus</a> — nobody remembers who paid for dinner
+  </div>
+</footer>
+
+<script>
+/* =====================================================================
+   Scroll reveal + sticky nav border + copy buttons
+   ===================================================================== */
+(function () {
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+    });
+  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+  document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
+
+  var nav = document.getElementById('nav');
+  var onScroll = function () { nav.classList.toggle('stuck', window.scrollY > 8); };
+  addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  document.querySelectorAll('.copy-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      navigator.clipboard.writeText(b.dataset.copy).then(function () {
+        b.textContent = 'Copied'; b.classList.add('done');
+        setTimeout(function () { b.textContent = 'Copy'; b.classList.remove('done'); }, 1600);
+      });
+    });
+  });
+})();
+
+/* =====================================================================
+   LIVE BOARD DEMO
+   A faithful browser port of game/board.js generation plus the parts of
+   game/engine.js the demo exercises: the settlement distance rule and the
+   dice production loop. Same weights, same token bag, same port placement.
+   ===================================================================== */
+(function () {
+  var canvas = document.getElementById('demo-canvas');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+
+  /* ---------------------------------------------------- board.js (ported) */
+  var SQRT3 = Math.sqrt(3);
+
+  function axialToPixel(q, r, size) {
+    return { x: size * SQRT3 * (q + r / 2), y: size * 1.5 * r };
+  }
+  function hexCorners(cx, cy, size) {
+    var out = [];
+    for (var i = 0; i < 6; i++) {
+      var a = (Math.PI / 180) * (60 * i - 30);
+      out.push({ x: cx + size * Math.cos(a), y: cy + size * Math.sin(a) });
+    }
+    return out;
+  }
+  var vkey = function (x, y) {
+    return (Math.round(x * 1e4) / 1e4) + ',' + (Math.round(y * 1e4) / 1e4);
+  };
+  function hexesInRadius(R) {
+    var list = [];
+    for (var q = -R; q <= R; q++) {
+      for (var r = Math.max(-R, -q - R); r <= Math.min(R, -q + R); r++) list.push({ q: q, r: r });
+    }
+    return list;
+  }
+  function shuffle(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
+  // Resource weights mirror Catan's 4/4/4/3/3 over 18 land hexes.
+  var RES_WEIGHTS = [['wood', 4], ['sheep', 4], ['wheat', 4], ['brick', 3], ['ore', 3]];
+  // Standard token distribution (no 7). 6 & 8 are the hot numbers.
+  var TOKEN_BAG = [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12];
+
+  function buildResourceBag(landCount) {
+    var bag = [], totalW = 0, i;
+    for (i = 0; i < RES_WEIGHTS.length; i++) totalW += RES_WEIGHTS[i][1];
+    for (i = 0; i < RES_WEIGHTS.length; i++) {
+      var n = Math.max(1, Math.round((RES_WEIGHTS[i][1] / totalW) * landCount));
+      for (var k = 0; k < n; k++) bag.push(RES_WEIGHTS[i][0]);
+    }
+    while (bag.length < landCount) bag.push('wheat');
+    while (bag.length > landCount) bag.pop();
+    return bag;
+  }
+  function buildTokenBag(landCount) {
+    var bag = [];
+    while (bag.length < landCount) {
+      for (var i = 0; i < TOKEN_BAG.length; i++) {
+        if (bag.length >= landCount) break;
+        bag.push(TOKEN_BAG[i]);
+      }
+    }
+    return bag;
+  }
+  function radiusForPlayers(p) { return p <= 4 ? 2 : (p <= 7 ? 3 : 4); }
+
+  function buildPorts(edges, hexes) {
+    var coastal = edges.filter(function (e) { return e.hexes.length === 1; });
+    if (!coastal.length) return [];
+    var cx = 0, cy = 0, i;
+    for (i = 0; i < hexes.length; i++) { cx += hexes[i].x; cy += hexes[i].y; }
+    cx /= hexes.length; cy /= hexes.length;
+    coastal.sort(function (a, b) {
+      return Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx);
+    });
+    var portCount = Math.max(4, Math.round(coastal.length / 3.5));
+    var specific = ['wood', 'brick', 'sheep', 'wheat', 'ore'];
+    var types = [];
+    for (i = 0; i < portCount; i++) {
+      types.push(i % 2 === 0 ? '3:1' : specific[(i >> 1) % specific.length]);
+    }
+    var ports = [], used = {}, step = coastal.length / portCount;
+    for (i = 0; i < portCount; i++) {
+      var e = coastal[Math.floor(i * step) % coastal.length];
+      if (used[e.id]) continue;
+      used[e.id] = 1;
+      ports.push({ edgeId: e.id, type: types[i], vertices: [e.v1, e.v2], x: e.x, y: e.y });
+    }
+    return ports;
+  }
+
+  function generateBoard(playerCount) {
+    var R = radiusForPlayers(playerCount);
+    var size = 1;
+    var cells = hexesInRadius(R);
+    var desertCount = Math.max(1, Math.round(cells.length / 19));
+    var landCount = cells.length - desertCount;
+
+    var resBag = shuffle(buildResourceBag(landCount));
+    var tokenBag = shuffle(buildTokenBag(landCount));
+    var idxs = shuffle(cells.map(function (_, i) { return i; }));
+    var desertSet = {};
+    idxs.slice(0, desertCount).forEach(function (i) { desertSet[i] = 1; });
+
+    var hexes = [], robberHex = null, ri = 0, ti = 0;
+    cells.forEach(function (c, i) {
+      var p = axialToPixel(c.q, c.r, size);
+      var isDesert = !!desertSet[i];
+      hexes.push({
+        id: i, q: c.q, r: c.r, x: p.x, y: p.y,
+        type: isDesert ? 'desert' : resBag[ri++],
+        token: isDesert ? null : tokenBag[ti++]
+      });
+      if (isDesert && robberHex === null) robberHex = i;
+    });
+    if (robberHex === null) robberHex = 0;
+
+    var vertMap = {}, edgeMap = {}, vertices = [], edges = [];
+    function getVertex(x, y) {
+      var k = vkey(x, y), v = vertMap[k];
+      if (!v) {
+        v = { id: vertices.length, x: x, y: y, hexes: [], edges: [], verts: [] };
+        vertMap[k] = v; vertices.push(v);
+      }
+      return v;
+    }
+    function getEdge(a, b) {
+      var k = a.id < b.id ? a.id + '-' + b.id : b.id + '-' + a.id;
+      var e = edgeMap[k];
+      if (!e) {
+        e = { id: edges.length, v1: a.id, v2: b.id, hexes: [],
+              x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        edgeMap[k] = e; edges.push(e);
+        if (a.verts.indexOf(b.id) < 0) a.verts.push(b.id);
+        if (b.verts.indexOf(a.id) < 0) b.verts.push(a.id);
+        if (a.edges.indexOf(e.id) < 0) a.edges.push(e.id);
+        if (b.edges.indexOf(e.id) < 0) b.edges.push(e.id);
+      }
+      return e;
+    }
+    hexes.forEach(function (hex) {
+      var corners = hexCorners(hex.x, hex.y, size).map(function (c) { return getVertex(c.x, c.y); });
+      corners.forEach(function (c) { if (c.hexes.indexOf(hex.id) < 0) c.hexes.push(hex.id); });
+      for (var i = 0; i < 6; i++) {
+        var e = getEdge(corners[i], corners[(i + 1) % 6]);
+        if (e.hexes.indexOf(hex.id) < 0) e.hexes.push(hex.id);
+      }
+    });
+
+    var ports = buildPorts(edges, hexes);
+
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    vertices.forEach(function (v) {
+      minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x);
+      minY = Math.min(minY, v.y); maxY = Math.max(maxY, v.y);
+    });
+
+    return {
+      radius: R, hexes: hexes, vertices: vertices, edges: edges, ports: ports,
+      robberHex: robberHex, bounds: { minX: minX, minY: minY, maxX: maxX, maxY: maxY }
+    };
+  }
+
+  /* -------------------------------------------------------- demo game state */
+  var RES_COLORS = {
+    wood: ['#3f9b46', '#256d2b'], brick: ['#d4793f', '#a64e22'],
+    sheep: ['#a9e06a', '#6fb13a'], wheat: ['#f0d152', '#cba62f'],
+    ore: ['#9fb0c4', '#6b7a90'], desert: ['#e3d3a3', '#c9b375']
+  };
+  var RES_ICON = { wood: '🌲', brick: '🧱', sheep: '🐑', wheat: '🌾', ore: '⛰️', desert: '🏜️' };
+  var RES_LIST = ['wood', 'brick', 'sheep', 'wheat', 'ore'];
+  var PLAYER_COLORS = ['#e23d3d', '#3d7fe2', '#2fbf6b', '#f0a830'];
+  var PLAYER_NAMES = ['You', 'Ana', 'Marco', '🤖 Bot 1'];
+
+  var G = null;              // board
+  var settlements = {};      // vertexId -> {player, type}
+  var roads = {};            // edgeId   -> player
+  var hand = { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 };
+  var robberHex = 0;
+  var pieceTimes = {};       // key -> first-seen ms, for the pop animation
+  var floaters = [];
+  var hover = null;
+  var seats = 4;
+  var placed = 0;
+  var MAX_PLACE = 5;         // PIECE_LIMITS.settlements
+  var robberPos = null, robberTarget = null;
+  var view = { scale: 1, cx: 0, cy: 0 };
+
+  var elLog = document.getElementById('demo-log');
+  var elHint = document.getElementById('demo-hint');
+  var elGrid = document.getElementById('res-grid');
+  var elD1 = document.getElementById('die1');
+  var elD2 = document.getElementById('die2');
+  var elSum = document.getElementById('dice-sum');
+  var elRoll = document.getElementById('btn-roll');
+  var elNew = document.getElementById('btn-new');
+  var elCode = document.getElementById('demo-code');
+
+  function log(html) {
+    var d = document.createElement('div');
+    d.innerHTML = html;
+    elLog.appendChild(d);
+    while (elLog.children.length > 24) elLog.removeChild(elLog.firstChild);
+    elLog.scrollTop = elLog.scrollHeight;
+  }
+  function hint(t) { elHint.textContent = t; elHint.style.opacity = t ? '1' : '0'; }
+
+  function drawHand(bumped) {
+    elGrid.innerHTML = '';
+    RES_LIST.forEach(function (r) {
+      var d = document.createElement('div');
+      d.className = 'res ' + r + (bumped && bumped[r] ? ' bump' : '');
+      d.innerHTML = '<span class="i">' + RES_ICON[r] + '</span>' + hand[r];
+      elGrid.appendChild(d);
+    });
+    if (bumped) setTimeout(function () { drawHand(null); }, 420);
+  }
+
+  /* ---------------- engine.js: vertexOpen() — the distance rule ----------- */
+  function vertexOpen(vid) {
+    if (settlements[vid]) return false;
+    var v = G.vertices[vid];
+    for (var i = 0; i < v.verts.length; i++) if (settlements[v.verts[i]]) return false;
+    return true;
+  }
+
+  function legalSpots() {
+    var out = {};
+    if (placed >= MAX_PLACE) return out;
+    for (var i = 0; i < G.vertices.length; i++) if (vertexOpen(i)) out[i] = 1;
+    return out;
+  }
+  var legal = {};
+
+  function place(vid, player) {
+    settlements[vid] = { player: player, type: 'settlement' };
+    pieceTimes['s' + vid] = performance.now();
+    // give the settlement one road, picked from a free adjacent edge
+    var v = G.vertices[vid];
+    for (var i = 0; i < v.edges.length; i++) {
+      if (roads[v.edges[i]] == null) {
+        roads[v.edges[i]] = player;
+        pieceTimes['r' + v.edges[i]] = performance.now();
+        break;
+      }
+    }
+  }
+
+  /* ------------- engine.js: rollDice() — production, sevens, robber -------- */
+  function roll() {
+    var d1 = 1 + Math.floor(Math.random() * 6);
+    var d2 = 1 + Math.floor(Math.random() * 6);
+    var sum = d1 + d2;
+
+    elD1.classList.remove('rolling'); elD2.classList.remove('rolling');
+    void elD1.offsetWidth;
+    elD1.classList.add('rolling'); elD2.classList.add('rolling');
+    elD1.textContent = d1; elD2.textContent = d2;
+    elSum.innerHTML = '<b>' + sum + '</b>' + (sum === 7 ? ' — robber' : '');
+
+    if (sum === 7) {
+      // move the robber onto the most productive hex that isn't the desert
+      var best = robberHex, bestScore = -1;
+      G.hexes.forEach(function (h) {
+        if (h.type === 'desert' || h.id === robberHex || h.token == null) return;
+        var pips = 6 - Math.abs(7 - h.token);
+        var owned = G.vertices.filter(function (v) {
+          return v.hexes.indexOf(h.id) >= 0 && settlements[v.id];
+        }).length;
+        var s = pips * (1 + owned);
+        if (s > bestScore) { bestScore = s; best = h.id; }
+      });
+      robberHex = best;
+      var rh = G.hexes[robberHex];
+      robberTarget = { x: rh.x, y: rh.y };
+      log('<b>🥷 Robber!</b> Moved onto the ' + rh.type + ' ' + (rh.token || '') +
+          ' — it stops producing.');
+      hint('A 7 moves the robber. That hex is shut off.');
+      return;
+    }
+
+    // production: every hex showing this number, minus the one under the robber
+    var gains = {}, bumped = {}, anyoneGained = false;
+    G.hexes.forEach(function (h) {
+      if (h.token !== sum || h.id === robberHex || h.type === 'desert') return;
+      G.vertices.forEach(function (v) {
+        if (v.hexes.indexOf(h.id) < 0) return;
+        var s = settlements[v.id];
+        if (!s) return;
+        var amt = s.type === 'city' ? 2 : 1;
+        gains[s.player] = gains[s.player] || {};
+        gains[s.player][h.type] = (gains[s.player][h.type] || 0) + amt;
+        anyoneGained = true;
+        if (s.player === 0) { hand[h.type] += amt; bumped[h.type] = 1; }
+        floaters.push({
+          text: '+' + RES_ICON[h.type], x: v.x, y: v.y,
+          born: performance.now(), color: PLAYER_COLORS[s.player]
+        });
+      });
+    });
+
+    drawHand(bumped);
+
+    if (!anyoneGained) {
+      log('Rolled <b>' + sum + '</b> (' + d1 + '+' + d2 + '). Nobody produces.');
+      hint(placed === 0 ? 'Settle a corner first — then rolls pay you.'
+                        : 'No building sits on a ' + sum + ' this time.');
+      return;
+    }
+    var parts = [];
+    Object.keys(gains).forEach(function (pi) {
+      var bits = Object.keys(gains[pi]).map(function (r) {
+        return RES_ICON[r] + (gains[pi][r] > 1 ? '×' + gains[pi][r] : '');
+      }).join(' ');
+      parts.push('<b>' + PLAYER_NAMES[pi] + '</b> ' + bits);
+    });
+    log('Rolled <b>' + sum + '</b> (' + d1 + '+' + d2 + '). ' + parts.join(' · '));
+    hint('Roll again, or settle another corner.');
+  }
+
+  /* ------------------------------------------------------------- rendering */
+  function fit() {
+    var b = G.bounds;
+    var w = canvas.clientWidth, h = canvas.clientHeight;
+    var pad = 1.15;
+    var bw = (b.maxX - b.minX) + pad * 2, bh = (b.maxY - b.minY) + pad * 2;
+    view.scale = Math.min(w / bw, h / bh) * 0.95;
+    view.cx = (b.minX + b.maxX) / 2;
+    view.cy = (b.minY + b.maxY) / 2;
+  }
+  function w2s(x, y) {
+    return {
+      x: (x - view.cx) * view.scale + canvas.clientWidth / 2,
+      y: (y - view.cy) * view.scale + canvas.clientHeight / 2
+    };
+  }
+  function resize() {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(canvas.clientWidth * dpr);
+    canvas.height = Math.floor(canvas.clientHeight * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (G) fit();
+  }
+
+  function hexPath(cx, cy, R) {
+    ctx.beginPath();
+    for (var i = 0; i < 6; i++) {
+      var a = (Math.PI / 180) * (60 * i - 30);
+      var x = cx + R * Math.cos(a), y = cy + R * Math.sin(a);
+      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  function pop(k, now) {
+    var t0 = pieceTimes[k];
+    if (t0 == null) return 1;
+    var t = Math.min(1, (now - t0) / 300);
+    return 1 + Math.sin(t * Math.PI) * 0.35 * (1 - t) + (t < 1 ? t - 1 : 0) * 0 || t < 1 ? (0.4 + 0.6 * t) + Math.sin(t * Math.PI) * 0.25 : 1;
+  }
+
+  function drawToken(x, y, R, n) {
+    var rad = R * 0.32;
+    ctx.beginPath(); ctx.arc(x, y, rad, 0, 7);
+    ctx.fillStyle = '#f3ecd6'; ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth = 1.5; ctx.stroke();
+    var hot = (n === 6 || n === 8);
+    ctx.fillStyle = hot ? '#c0392b' : '#2a2a2a';
+    ctx.font = 'bold ' + (rad * 1.0) + 'px Georgia';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(n, x, y - rad * 0.16);
+    var pips = 6 - Math.abs(7 - n);
+    var pw = rad * 0.12, total = pips * (pw * 2.4);
+    for (var i = 0; i < pips; i++) {
+      ctx.beginPath();
+      ctx.arc(x - total / 2 + pw + i * pw * 2.4, y + rad * 0.55, pw, 0, 7);
+      ctx.fillStyle = hot ? '#c0392b' : '#2a2a2a'; ctx.fill();
+    }
+  }
+
+  function frame() {
+    requestAnimationFrame(frame);
+    if (!G) return;
+    var now = performance.now();
+    var W = canvas.clientWidth, H = canvas.clientHeight;
+
+    // sea
+    var sea = ctx.createLinearGradient(0, 0, 0, H);
+    sea.addColorStop(0, '#0c2137'); sea.addColorStop(1, '#071322');
+    ctx.fillStyle = sea; ctx.fillRect(0, 0, W, H);
+
+    var s = view.scale, R = s * 0.97;
+
+    // hexes
+    G.hexes.forEach(function (h) {
+      var p = w2s(h.x, h.y);
+      var c = RES_COLORS[h.type] || RES_COLORS.desert;
+      var g = ctx.createLinearGradient(p.x, p.y - R, p.x, p.y + R);
+      g.addColorStop(0, c[0]); g.addColorStop(1, c[1]);
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = s * 0.18; ctx.shadowOffsetY = s * 0.08;
+      hexPath(p.x, p.y, R); ctx.fillStyle = g; ctx.fill();
+      ctx.restore();
+      hexPath(p.x, p.y, R);
+      ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.globalAlpha = 0.22; ctx.font = (R * 0.7) + 'px serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(RES_ICON[h.type] || '', p.x, p.y - R * 0.1);
+      ctx.globalAlpha = 1;
+      if (h.token != null) drawToken(p.x, p.y, R, h.token);
+    });
+
+    // ports
+    G.ports.forEach(function (port) {
+      var p = w2s(port.x, port.y);
+      ctx.beginPath(); ctx.arc(p.x, p.y, s * 0.22, 0, 7);
+      ctx.fillStyle = 'rgba(10,24,40,.85)'; ctx.fill();
+      ctx.strokeStyle = '#cfe6ff'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = '#cfe6ff'; ctx.font = 'bold ' + (s * 0.16) + 'px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(port.type === '3:1' ? '3:1' : (RES_ICON[port.type] || '?') + '2', p.x, p.y);
+    });
+
+    // roads
+    Object.keys(roads).forEach(function (eid) {
+      var e = G.edges[eid];
+      var a = w2s(G.vertices[e.v1].x, G.vertices[e.v1].y);
+      var b = w2s(G.vertices[e.v2].x, G.vertices[e.v2].y);
+      var t = pop('r' + eid, now);
+      var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      ctx.save();
+      ctx.translate(mx, my); ctx.scale(t, t); ctx.translate(-mx, -my);
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = s * 0.20;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.strokeStyle = PLAYER_COLORS[roads[eid]]; ctx.lineWidth = s * 0.14;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.restore();
+    });
+
+    // legal spots
+    if (Object.keys(legal).length) {
+      var puls = 0.5 + 0.5 * Math.sin(now / 380);
+      Object.keys(legal).forEach(function (vid) {
+        var v = G.vertices[vid], p = w2s(v.x, v.y);
+        var isHover = hover === +vid;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, s * (isHover ? 0.20 : 0.11 + 0.03 * puls), 0, 7);
+        ctx.fillStyle = isHover ? 'rgba(255,255,255,.95)' : 'rgba(255,255,255,' + (0.32 + 0.28 * puls) + ')';
+        ctx.fill();
+        if (isHover) {
+          ctx.strokeStyle = PLAYER_COLORS[0]; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(p.x, p.y, s * 0.28, 0, 7); ctx.stroke();
+        }
+      });
+    }
+
+    // settlements
+    Object.keys(settlements).forEach(function (vid) {
+      var st = settlements[vid], v = G.vertices[vid], p = w2s(v.x, v.y);
+      var t = pop('s' + vid, now);
+      var w = s * 0.30 * t, hh = s * 0.26 * t;
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 2;
+      ctx.fillStyle = PLAYER_COLORS[st.player];
+      ctx.beginPath();
+      ctx.moveTo(p.x - w / 2, p.y + hh / 2);
+      ctx.lineTo(p.x - w / 2, p.y - hh / 4);
+      ctx.lineTo(p.x, p.y - hh * 0.85);
+      ctx.lineTo(p.x + w / 2, p.y - hh / 4);
+      ctx.lineTo(p.x + w / 2, p.y + hh / 2);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1.4; ctx.stroke();
+    });
+
+    // robber
+    if (robberPos && robberTarget) {
+      robberPos.x += (robberTarget.x - robberPos.x) * 0.16;
+      robberPos.y += (robberTarget.y - robberPos.y) * 0.16;
+      var rp = w2s(robberPos.x, robberPos.y);
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 10;
+      ctx.fillStyle = '#1b1b1b';
+      ctx.beginPath();
+      ctx.ellipse(rp.x, rp.y + s * 0.06, s * 0.16, s * 0.22, 0, 0, 7);
+      ctx.fill();
+      ctx.beginPath(); ctx.arc(rp.x, rp.y - s * 0.19, s * 0.11, 0, 7); ctx.fill();
+      ctx.restore();
+    }
+
+    // floaters
+    floaters = floaters.filter(function (f) { return now - f.born < 1300; });
+    floaters.forEach(function (f) {
+      var t = (now - f.born) / 1300;
+      var p = w2s(f.x, f.y);
+      ctx.globalAlpha = 1 - t;
+      ctx.font = 'bold ' + (s * 0.3) + 'px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.text, p.x, p.y - s * 0.5 - t * s * 0.7);
+      ctx.globalAlpha = 1;
+    });
+  }
+
+  /* ------------------------------------------------------------ interaction */
+  function nearestVertex(mx, my) {
+    var best = null, bd = 1e9, thr = view.scale * 0.5;
+    for (var i = 0; i < G.vertices.length; i++) {
+      var p = w2s(G.vertices[i].x, G.vertices[i].y);
+      var d = Math.hypot(p.x - mx, p.y - my);
+      if (d < bd) { bd = d; best = i; }
+    }
+    return bd < thr ? best : null;
+  }
+  function mousePos(e) {
+    var r = canvas.getBoundingClientRect();
+    var t = e.touches ? e.touches[0] : e;
+    return { x: t.clientX - r.left, y: t.clientY - r.top };
+  }
+
+  canvas.addEventListener('mousemove', function (e) {
+    var m = mousePos(e);
+    var v = nearestVertex(m.x, m.y);
+    hover = (v != null && legal[v]) ? v : null;
+    canvas.style.cursor = hover != null ? 'pointer' : 'default';
+  });
+  canvas.addEventListener('mouseleave', function () { hover = null; });
+
+  canvas.addEventListener('click', function (e) {
+    var m = mousePos(e);
+    var v = nearestVertex(m.x, m.y);
+    if (v == null) return;
+    if (!legal[v]) {
+      if (settlements[v] || !vertexOpen(v)) {
+        hint('Too close to another building — the distance rule says no.');
+        setTimeout(function () { hint(hintDefault()); }, 1800);
+      }
+      return;
+    }
+    place(v, 0);
+    placed++;
+    hover = null;
+    legal = legalSpots();
+    log('<b>You</b> settled a corner. ' + (placed >= MAX_PLACE
+      ? 'That is all five settlements.'
+      : (MAX_PLACE - placed) + ' left in your supply.'));
+    hint(placed === 1 ? 'Now roll — hexes touching your settlement pay out.' : hintDefault());
+  });
+
+  function hintDefault() {
+    if (placed >= MAX_PLACE) return 'Out of settlements — roll, or start a new board.';
+    if (placed === 0) return 'Click a glowing spot to settle it';
+    return 'Roll the dice, or settle another corner';
+  }
+
+  elRoll.addEventListener('click', roll);
+  elNew.addEventListener('click', function () { newGame(seats); });
+
+  document.querySelectorAll('#seat-chips .chip').forEach(function (c) {
+    c.addEventListener('click', function () {
+      document.querySelectorAll('#seat-chips .chip').forEach(function (x) { x.classList.remove('on'); });
+      c.classList.add('on');
+      newGame(+c.dataset.p);
+    });
+  });
+
+  /* ------------------------------------------------------------------ setup */
+  function newGame(playerCount) {
+    seats = playerCount;
+    G = generateBoard(playerCount);
+    settlements = {}; roads = {}; pieceTimes = {}; floaters = [];
+    hand = { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 };
+    placed = 0; hover = null;
+    robberHex = G.robberHex;
+    var rh = G.hexes[robberHex];
+    robberTarget = { x: rh.x, y: rh.y };
+    robberPos = { x: rh.x, y: rh.y };
+
+    // seat a couple of opponents so the island looks contested
+    var opponents = Math.min(3, Math.max(1, Math.round(playerCount / 3)));
+    for (var p = 1; p <= opponents; p++) {
+      for (var n = 0; n < 2; n++) {
+        var open = [];
+        for (var i = 0; i < G.vertices.length; i++) if (vertexOpen(i)) open.push(i);
+        if (!open.length) break;
+        place(open[Math.floor(Math.random() * open.length)], p);
+      }
+    }
+    pieceTimes = {}; // opponents are already there — don't pop them in
+
+    legal = legalSpots();
+    elD1.textContent = '–'; elD2.textContent = '–';
+    elSum.textContent = 'roll to produce';
+    elCode.textContent = Math.random().toString(36).slice(2, 6).toUpperCase();
+    elLog.innerHTML = '';
+    log('New board — <b>' + G.hexes.length + ' hexes</b>, radius ' + G.radius +
+        ', ' + G.ports.length + ' ports, for ' + playerCount + ' players.');
+    log('The robber starts on the desert.');
+    drawHand(null);
+    resize();
+    hint(hintDefault());
+  }
+
+  addEventListener('resize', resize);
+  newGame(4);
+  frame();
+})();
+</script>
+</body>
+</html>

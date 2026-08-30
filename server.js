@@ -16,7 +16,20 @@ const GRACE_MS = 1000 * 60 * 10; // keep a room alive 10 min after the last sock
 const app = express();
 // Render pings this to confirm the instance is live (healthCheckPath in render.yaml).
 app.get('/healthz', (_req, res) => res.type('text').send('ok'));
-app.use(express.static(join(__dirname, 'public')));
+
+// `/` is the marketing landing page, `/play` is the game itself.
+// Both HTML files also sit in public/, so send their raw filenames to the
+// canonical route instead of serving the same page at two URLs. This runs
+// before express.static, which would otherwise answer them first.
+app.get('/landing.html', (_req, res) => res.redirect(301, '/'));
+app.get('/index.html', (_req, res) => res.redirect(301, '/play'));
+
+// index:false stops express.static handing out public/index.html (the game) at the root.
+app.use(express.static(join(__dirname, 'public'), { index: false }));
+app.get('/', (_req, res) => res.sendFile(join(__dirname, 'public', 'landing.html')));
+// Matches /play and /play/ — public/index.html carries <base href="/"> so its
+// relative css/js paths resolve the same either way.
+app.get('/play', (_req, res) => res.sendFile(join(__dirname, 'public', 'index.html')));
 
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer });
@@ -282,6 +295,7 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('\n  🎲  HEXAGON server running\n');
   console.log(`  Local:   http://localhost:${PORT}`);
   for (const ip of ips) console.log(`  Network: http://${ip}:${PORT}   <- share this with friends on your LAN`);
-  console.log('\n  Host opens the page, clicks "Create Game", shares the room code.');
+  console.log('\n  The root URL is the landing page; the game itself lives at /play.');
+  console.log('  Host opens /play, clicks "Create Game", shares the room code.');
   console.log('  Friends open the Network URL above and "Join" with that code.\n');
 });
