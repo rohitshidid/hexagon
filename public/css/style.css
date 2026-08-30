@@ -252,3 +252,162 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px r
   #hand { max-width: 92vw; }
   .rescard { width: 42px; height: 56px; }
 }
+
+/* =====================================================================
+   LOBBY THEME — carries the landing page's design language (public/landing.html)
+   into the lobby: the same orange accent, type stack, tight display tracking
+   and pill buttons, kept on a dark card so the handoff to the game board is
+   seamless. Every rule is scoped to #lobby, so the in-game HUD is untouched.
+   ===================================================================== */
+#lobby {
+  --l-accent:      #c2410c;   /* landing --accent */
+  --l-accent-lift: #e0561b;   /* lifts on dark, where accent-deep would sink */
+  --l-ink:         #f2f5fa;
+  --l-soft:        rgba(242, 245, 250, .62);
+  --l-faint:       rgba(242, 245, 250, .40);
+  --l-line:        rgba(255, 255, 255, .11);
+  --l-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+            "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --l-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-family: var(--l-sans);
+}
+
+/* ---------------------------------------------------------------- card */
+#lobby .lobby-card {
+  background: rgba(11, 22, 38, .72);
+  border: 1px solid var(--l-line);
+  border-radius: 22px;
+  padding: 38px 32px 32px;
+  color: var(--l-ink);
+  box-shadow: 0 2px 6px rgba(0,0,0,.30), 0 28px 70px rgba(0,0,0,.55);
+}
+
+/* ------------------------------------------------------------ wordmark */
+#lobby .lobby-mark { display: block; width: 42px; height: 42px; margin: 0 auto 14px; }
+#lobby .logo {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.03em;   /* landing's tight display tracking */
+  text-align: center;
+  /* the landing keeps headings a flat ink colour and lets the mark carry the accent */
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: var(--l-ink);
+  text-shadow: none;
+}
+#lobby .logo span { font-weight: 300; color: var(--l-soft); }
+#lobby .tagline {
+  text-align: center;
+  color: var(--l-soft);
+  font-size: 14.5px;
+  font-weight: 300;
+  line-height: 1.5;
+  margin: 10px auto 26px;
+  max-width: 34ch;
+}
+
+/* ----------------------------------------------- labels, inputs, fields */
+/* mono uppercase micro-labels, lifted from the landing's .demo-label */
+#lobby .field > span {
+  font-family: var(--l-mono);
+  font-size: 10px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--l-faint);
+}
+#lobby .field.inline > span { text-transform: none; font-family: var(--l-sans);
+                              font-size: 13px; letter-spacing: 0; color: var(--l-soft); }
+
+#lobby input, #lobby select {
+  background: rgba(0, 0, 0, .30);
+  border: 1px solid var(--l-line);
+  color: var(--l-ink);
+  border-radius: 11px;
+  padding: 12px 14px;
+  font-family: var(--l-sans);
+  font-size: 15px;
+}
+#lobby input::placeholder { color: var(--l-faint); }
+#lobby input:focus, #lobby select:focus {
+  border-color: var(--l-accent-lift);
+  box-shadow: 0 0 0 3px rgba(194, 65, 12, .22);
+}
+#lobby .code-input {
+  font-family: var(--l-mono);
+  letter-spacing: 6px;
+  font-size: 17px;
+}
+
+/* -------------------------------------------------------------- buttons */
+#lobby .btn {
+  font-family: var(--l-sans);
+  border-radius: 999px;              /* landing's pills */
+  font-weight: 550;
+  letter-spacing: -0.011em;
+  font-size: 14px;
+  padding: 12px 22px;
+  background: rgba(255, 255, 255, .07);
+  border: 1px solid var(--l-line);
+  color: var(--l-ink);
+  transition: transform .18s ease, box-shadow .25s ease,
+              background-color .2s ease, border-color .2s ease;
+}
+#lobby .btn:hover { background: rgba(255, 255, 255, .13); transform: translateY(-1.5px); }
+#lobby .btn.primary {
+  background: var(--l-accent);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(194, 65, 12, .32);
+}
+#lobby .btn.primary:hover {
+  background: var(--l-accent-lift);
+  box-shadow: 0 10px 26px rgba(194, 65, 12, .42);
+}
+#lobby .btn.ghost { background: transparent; }
+#lobby .btn.ghost:hover { background: rgba(255, 255, 255, .07); }
+#lobby .btn.tiny { padding: 6px 13px; font-size: 12px; }
+#lobby .btn:disabled { opacity: .38; transform: none; box-shadow: none; }
+
+/* -------------------------------------------------- divider, hints, room */
+#lobby .divider {
+  font-family: var(--l-mono);
+  font-size: 10px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--l-faint);
+  margin: 20px 0;
+}
+#lobby .divider::before, #lobby .divider::after { background: var(--l-line); }
+
+#lobby .hint  { color: var(--l-faint); font-size: 12.5px; line-height: 1.55; }
+#lobby .error { color: #ff7a6b; font-size: 13px; }
+
+#lobby .room-code { font-size: 15px; color: var(--l-soft); }
+#lobby .room-code b {
+  font-family: var(--l-mono);
+  color: var(--l-accent-lift);
+  font-size: 26px;
+  letter-spacing: 4px;
+}
+
+/* --------------------------------------------------------- player list */
+#lobby .player-list li {
+  background: rgba(255, 255, 255, .045);
+  border: 1px solid var(--l-line);
+  border-radius: 11px;
+  font-size: 14px;
+  padding: 10px 13px;
+}
+#lobby .player-list .host-tag {
+  font-family: var(--l-mono);
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--l-accent-lift);
+}
+
+/* The primary action anchors the card, so it matches the width of the field
+   above it rather than shrink-wrapping to its label. */
+#lobby #btn-create, #lobby #btn-start { flex: 1; }
+#lobby #lobby-home .row, #lobby #lobby-room .row { gap: 10px; }

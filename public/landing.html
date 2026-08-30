@@ -177,6 +177,9 @@ code {
 .hero-cta { margin-top: 34px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 .hero-note { margin-top: 16px; font-size: .82rem; color: var(--ink-faint); }
 .hero-note a { color: var(--ink-faint); text-decoration: underline; text-underline-offset: 2px; }
+/* the run-locally link is a real call to action, so it carries the accent */
+.hero-note a.link-run { color: var(--accent); font-weight: 550; text-decoration-color: rgba(194,65,12,.42); }
+.hero-note a.link-run:hover { text-decoration-color: var(--accent); }
 
 /* ------------------------------------------------------ the board window */
 .stage { margin-top: clamp(40px, 5.5vw, 66px); }
@@ -511,12 +514,12 @@ code {
       nobody can see your hand. Short a few players? <strong>Fill the empty seats with bots.</strong>
     </p>
     <div class="hero-cta">
-      <a href="https://github.com/rohitshidid/hexagon" class="btn btn-fill btn-lg">View on GitHub <span class="arrow">→</span></a>
-      <a href="#run" class="btn btn-ghost btn-lg">Run it yourself</a>
+      <a href="/play" class="btn btn-fill btn-lg">Open the game <span class="arrow">→</span></a>
+      <a href="https://github.com/rohitshidid/hexagon" class="btn btn-ghost btn-lg">View on GitHub</a>
     </div>
     <p class="hero-note">
       Node + <code>ws</code> · no build step · no database · no accounts ·
-      <a href="/play">or open the game right here</a>
+      <a href="#run" class="link-run">download and run it locally</a>
     </p>
   </div>
 
@@ -1103,10 +1106,13 @@ npm install">Copy</button>
       Host it on the laptop you already have open.
     </p>
     <div class="hero-cta reveal" style="--i:2">
-      <a href="https://github.com/rohitshidid/hexagon" class="btn btn-fill btn-lg">View on GitHub <span class="arrow">→</span></a>
-      <a href="/play" class="btn btn-ghost btn-lg">Open the game</a>
+      <a href="/play" class="btn btn-fill btn-lg">Open the game <span class="arrow">→</span></a>
+      <a href="https://github.com/rohitshidid/hexagon" class="btn btn-ghost btn-lg">View on GitHub</a>
     </div>
-    <p class="hero-note reveal" style="--i:3">2–10 players · Node 18+ · no accounts · no database</p>
+    <p class="hero-note reveal" style="--i:3">
+      2–10 players · Node 18+ · no accounts · no database ·
+      <a href="#run" class="link-run">download and run it locally</a>
+    </p>
   </div>
 </section>
 
